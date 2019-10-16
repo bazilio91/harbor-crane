@@ -1,0 +1,6 @@
+repos:
+  - source: node # docker.io
+    dest: localhost:5000/library/node
+    tags:
+      - ^\d\d+$ # >=10
+      - ^\d\d+\-alpine$
