@@ -1,6 +1,7 @@
 package crane
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sync"
@@ -28,30 +29,35 @@ func NewCrane() *Crane {
 	return sync
 }
 
-func (c *Crane) SyncRepo(repoConfig config.RepoConfig) error {
+func (c *Crane) SyncRepo(repoConfig config.RepoConfig, errors *[]error) {
 	sourceReference, err := c.GetRepoInfo(repoConfig.Source, nil)
 	if err != nil {
-		return err
+		*errors = append(*errors, err)
+		return
 	}
 
 	sourceRegistry, err := c.GetRegistry(reference.Domain(sourceReference))
 	if err != nil {
-		return err
+		*errors = append(*errors, err)
+		return
 	}
 
 	destReference, err := c.GetRepoInfo(repoConfig.Dest, nil)
 	if err != nil {
-		return err
+		*errors = append(*errors, err)
+		return
 	}
 
 	destRegistry, err := c.GetRegistry(reference.Domain(destReference))
 	if err != nil {
-		return err
+		*errors = append(*errors, err)
+		return
 	}
 
 	sourceTags, err := sourceRegistry.Tags(reference.Path(sourceReference))
 	if err != nil {
-		return err
+		*errors = append(*errors, err)
+		return
 	}
 
 	tagsForSync := []string{}
@@ -68,21 +74,22 @@ func (c *Crane) SyncRepo(repoConfig config.RepoConfig) error {
 	for _, tag := range tagsForSync {
 		destTagRef, err := reference.WithTag(destReference, tag)
 		if err != nil {
-			return err
+			*errors = append(*errors, err)
+			continue
 		}
 
 		sourceTagRef, err := reference.WithTag(sourceReference, tag)
 		if err != nil {
-			return err
+			*errors = append(*errors, err)
+			continue
 		}
 
 		err = c.SyncTag(sourceRegistry, destRegistry, sourceTagRef, destTagRef)
 		if err != nil {
-			return err
+			*errors = append(*errors, err)
+			continue
 		}
 	}
-
-	return nil
 }
 
 func (c *Crane) GetRepos(reg *registry.Registry) ([]string, error) {
@@ -130,7 +137,7 @@ func (c *Crane) GetTags(repo reference.Named, reg *registry.Registry) (repoTags 
 
 func (c *Crane) SyncTag(sourceRegistry *registry.Registry, destRegistry *registry.Registry, sourceReference reference.NamedTagged,
 	destReference reference.NamedTagged) error {
-	logrus.Infof("Syncing %s int %s", sourceReference.String(), destReference.String())
+	logrus.Infof("syncing %s into %s", sourceReference.String(), destReference.String())
 
 	destManifest, _ := destRegistry.ManifestV2(reference.Path(destReference), destReference.Tag())
 
@@ -175,13 +182,22 @@ func (c *Crane) SyncTag(sourceRegistry *registry.Registry, destRegistry *registr
 }
 
 func (c *Crane) Sync() error {
+	hadErr := false
 	for _, repoConfig := range c.Config.Repos {
-		err := c.SyncRepo(repoConfig)
-		if err != nil {
-			return err
-		}
+		repoErrors := make([]error, 0)
 
+		c.SyncRepo(repoConfig, &repoErrors)
+		if len(repoErrors) > 0 {
+			hadErr = true
+			logrus.Errorf("Repo %s synced with repoErrors:\n", repoConfig.Source)
+			for _, e := range repoErrors {
+				logrus.Errorln(e)
+			}
+		}
 	}
 
+	if hadErr {
+		return errors.New("some repos failed to sync")
+	}
 	return nil
 }
