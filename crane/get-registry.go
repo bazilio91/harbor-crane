@@ -66,7 +66,7 @@ func createRegistry(registryURL, username, password string, logf registry.LogfCa
 		defer resp.Body.Close()
 	}
 
-	if resp.StatusCode < 500 {
+	if resp != nil && resp.StatusCode < 500 {
 		return registry, nil
 	}
 
