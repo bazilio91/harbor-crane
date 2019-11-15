@@ -37,7 +37,10 @@ func (c *Crane) GetRegistry(url string) (*registry.Registry, error) {
 		reg, err = registry.New(repo_url, creds.Username, creds.Password)
 
 		if err != nil {
-			return nil, err
+			// sometimes /v2/ is closed by auth
+			if !strings.Contains(err.Error(), "status=401") {
+				return nil, err
+			}
 		}
 	}
 
