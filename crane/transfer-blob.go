@@ -43,6 +43,6 @@ func (c *Crane) TransferBlob(
 			logrus.Warnf("Blob push failed, retry %v", n+1)
 		}),
 		retry.Delay(1*time.Second),
-		retry.Attempts(1),
+		retry.Attempts(3),
 	)
 }
